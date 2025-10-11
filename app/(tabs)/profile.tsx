@@ -1,9 +1,11 @@
 
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import React from 'react';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { signOut } from 'firebase/auth';
+import { auth } from '../../firebase';
 
 const PALETTE = {
     primary: "#1193d4",
@@ -16,7 +18,7 @@ const PALETTE = {
     danger: "#ef4444",
 };
 
-const user = {
+const initialUser = {
     name: 'Arjun Kapoor',
     joined: 'Member since 2022',
     avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCA9uhYoyCKv7reYaUWReGpjEyTvmatk_mWQLCmhCbcIleVb46brqsGsDFGLXhOBxI6QD5vzjigGHmy92GB0LpXbv2Ilx0xtbISvhP-e_moNVS2CsOxkvy4sOscF2t3khzRcs8-hG5bCkmJx_gRTX1KFbsUlwyyJ142HiOoNg4pyQ435PftZdvoGOrPRnSGQk3JgeNCe_OVogaM9z4seVQ82mmqBt-SdY4SCaatdMgzdsxvKGKyUElMx-T7XZdFkSlEg6s9EccxkrA',
@@ -24,7 +26,7 @@ const user = {
     address: '23, Sector 15, Chandigarh',
 };
 
-const AccountInfo = ({ onNavigate }) => (
+const AccountInfo = ({ user, onNavigate }) => (
     <View style={styles.menuGroup}>
         <Text style={styles.sectionTitle}>Account Info</Text>
         <View style={styles.card}>
@@ -83,9 +85,22 @@ const Manage = ({ onNavigate }) => (
 
 const ProfileScreen = () => {
     const router = useRouter();
+    const params = useLocalSearchParams();
+    const { updatedContact } = params;
+    const [user, setUser] = useState(initialUser);
+
+    useEffect(() => {
+        if (updatedContact) {
+            setUser(prevUser => ({ ...prevUser, contact: updatedContact as string }));
+        }
+    }, [updatedContact]);
 
     const handleNavigate = (screen) => {
-        router.push(`/${screen}`);
+        if (screen === 'contact-details') {
+            router.push({ pathname: `/${screen}`, params: { contact: user.contact } });
+        } else {
+            router.push(`/${screen}`);
+        }
     };
 
     const handleLogout = () => {
@@ -94,7 +109,14 @@ const ProfileScreen = () => {
             "Are you sure you want to logout?",
             [
                 { text: "Cancel", style: "cancel" },
-                { text: "Logout", onPress: () => router.push('/(auth)/login'), style: "destructive" },
+                {
+                    text: "Logout",
+                    onPress: async () => {
+                        await signOut(auth);
+                        // The useAuth hook will automatically navigate the user
+                    },
+                    style: "destructive",
+                },
             ]
         );
     };
@@ -131,7 +153,7 @@ const ProfileScreen = () => {
                 </View>
 
                 <View style={styles.menuContainer}>
-                    <AccountInfo onNavigate={handleNavigate} />
+                    <AccountInfo user={user} onNavigate={handleNavigate} />
                     <Manage onNavigate={handleNavigate} />
                     <View style={{ paddingTop: 16 }}>
                         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>

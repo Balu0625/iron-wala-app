@@ -7,6 +7,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Location from 'expo-location';
 import MapView, { Marker } from 'react-native-maps';
+import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { auth, db } from '../firebase';
 
 const PALETTE = {
     primary: "#1193d4",
@@ -76,6 +78,7 @@ const OrderConfirmationScreen = () => {
     const [pickupAddress, setPickupAddress] = useState('123 Elm Street, Apt 4B, Springfield, IL 62704');
     const [deliveryAddress, setDeliveryAddress] = useState('456 Oak Avenue, Unit 2C, Springfield, IL 62704');
     const [sameAsPickup, setSameAsPickup] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
     
     useEffect(() => {
         if (manualAddress) {
@@ -214,6 +217,57 @@ const OrderConfirmationScreen = () => {
         }
         setMapVisible(false);
     };
+
+    const handleConfirmOrder = async () => {
+        console.log("handleConfirmOrder called"); // Checkpoint 1
+        const userId = auth.currentUser?.uid;
+        if (!userId) {
+            console.log("User not authenticated"); // Checkpoint 2
+            Alert.alert("Authentication Error", "You must be logged in to place an order.");
+            return;
+        }
+
+        console.log("User authenticated with ID:", userId); // Checkpoint 3
+
+        if (orderDetails.items.length === 0) {
+            console.log("Order has no items"); // Checkpoint 4
+            Alert.alert("Empty Order", "You cannot place an order with no items.");
+            return;
+        }
+
+        console.log("Order details are valid, proceeding to save..."); // Checkpoint 5
+        setIsLoading(true);
+
+        try {
+            const ordersRef = collection(db, "orders");
+            const orderData = {
+                userId: userId,
+                status: "Placed",
+                orderItems: orderDetails.items,
+                totalAmount: orderDetails.total,
+                pickupAddress: pickupAddress,
+                deliveryAddress: deliveryAddress,
+                pickupDate: pickupDate,
+                deliveryDate: deliveryDate,
+                createdAt: serverTimestamp(),
+            };
+
+            console.log("Saving order data:", JSON.stringify(orderData, null, 2)); // Checkpoint 6
+
+            await addDoc(ordersRef, orderData);
+
+            console.log("Order successfully saved to Firestore"); // Checkpoint 7
+
+            Alert.alert("Order Placed!", "Your order has been successfully placed.");
+            router.replace('/(tabs)/'); // Navigate to home screen
+
+        } catch (error) {
+            console.error("Error placing order: ", error); // Checkpoint 8 (Error)
+            Alert.alert("Order Failed", "There was an issue placing your order. Please try again.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
     
 
     return (
@@ -303,11 +357,15 @@ const OrderConfirmationScreen = () => {
             </ScrollView>
 
             <View style={styles.footer}>
-                 <TouchableOpacity style={styles.secondaryButton} onPress={() => router.back()}>
+                 <TouchableOpacity style={styles.secondaryButton} onPress={() => router.back()} disabled={isLoading}>
                     <Text style={styles.secondaryButtonText}>Edit Order</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.primaryButton}>
-                    <Text style={styles.primaryButtonText}>Confirm Order</Text>
+                <TouchableOpacity style={[styles.primaryButton, isLoading && styles.actionButtonDisabled]} onPress={handleConfirmOrder} disabled={isLoading}>
+                    {isLoading ? (
+                        <ActivityIndicator color="#fff" />
+                    ) : (
+                        <Text style={styles.primaryButtonText}>Confirm Order</Text>
+                    )}
                 </TouchableOpacity>
             </View>
 

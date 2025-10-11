@@ -1,11 +1,11 @@
 
 import { Ionicons } from '@expo/vector-icons';
-import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, FlatList, TouchableOpacity, Alert, Modal, ActivityIndicator } from 'react-native';
+import { StyleSheet, Text, View, FlatList, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import MapView, { Marker } from 'react-native-maps';
-import * as Location from 'expo-location';
+import { collection, onSnapshot, query, orderBy, doc, deleteDoc } from 'firebase/firestore';
+import { auth, db } from '../firebase';
 
 const PALETTE = {
     primary: "#1193d4",
@@ -13,99 +13,100 @@ const PALETTE = {
     card: "white",
     textPrimary: "#1f2937",
     textSecondary: "#4b5563",
+    danger: '#ef4444',
 };
-
-const initialAddresses = [
-    { id: '1', name: 'Home', details: '123 Elm Street, Apt 4B, Springfield, IL 62704' },
-    { id: '2', name: 'Work', details: '456 Oak Avenue, Unit 2C, Springfield, IL 62704' },
-];
 
 const SavedAddressesScreen = () => {
     const router = useRouter();
-    const params = useLocalSearchParams();
-    const { manualAddress } = params;
-
-    const [addresses, setAddresses] = useState(initialAddresses);
-    const [isMapVisible, setMapVisible] = useState(false);
-    const [currentLocation, setCurrentLocation] = useState(null);
-    const [selectedLocation, setSelectedLocation] = useState(null);
-    const [isLoadingLocation, setIsLoadingLocation] = useState(false);
+    const [addresses, setAddresses] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        if (manualAddress) {
-            const newAddress = { 
-                id: Math.random().toString(), 
-                name: 'New Address', 
-                details: manualAddress as string 
-            };
-            setAddresses(prev => [...prev, newAddress]);
-            // router.setParams({ manualAddress: null }); // Clear param
+        const userId = auth.currentUser?.uid;
+        if (!userId) {
+            // This case should not happen if the auth guard in _layout is working
+            setLoading(false);
+            return;
         }
-    }, [manualAddress]);
+
+        const addressesRef = collection(db, 'users', userId, 'addresses');
+        const q = query(addressesRef, orderBy('createdAt', 'desc'));
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const addressesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setAddresses(addressesData);
+            setLoading(false);
+        }, (error) => {
+            console.error("Error fetching addresses: ", error);
+            // The user will see this alert.
+            Alert.alert("Error", "Could not fetch addresses. Please check your connection and try again.");
+            setLoading(false);
+        });
+
+        // Unsubscribe from the listener when the component unmounts
+        return () => unsubscribe();
+    }, []);
 
     const handleAddNewAddress = () => {
+        router.push('/manual-address');
+    };
+
+    const handleEditAddress = (address: any) => {
+        router.push({ pathname: '/manual-address', params: address });
+    };
+
+    const handleDeleteAddress = (id: string) => {
         Alert.alert(
-            'Add New Address',
-            'How would you like to add a new address?',
+            'Delete Address',
+            'Are you sure you want to delete this address?',
             [
-                { text: 'Add Manually', onPress: () => router.push('/manual-address') },
-                { text: 'Select from Map', onPress: handleSelectOnMap },
                 { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Delete', 
+                    onPress: async () => {
+                        const userId = auth.currentUser?.uid;
+                        if (userId) {
+                            try {
+                                await deleteDoc(doc(db, 'users', userId, 'addresses', id));
+                            } catch (error) {
+                                console.error("Error deleting address: ", error);
+                                Alert.alert('Error', 'Could not delete address. Please try again.');
+                            }
+                        }
+                    }, 
+                    style: 'destructive' 
+                },
             ]
         );
     };
 
-    const handleSelectOnMap = async () => {
-        setIsLoadingLocation(true);
-        let { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted') {
-            Alert.alert('Permission denied', 'Permission to access location was denied');
-            setIsLoadingLocation(false);
-            return;
-        }
-
-        try {
-            let location = await Location.getCurrentPositionAsync({});
-            const coords = { latitude: location.coords.latitude, longitude: location.coords.longitude };
-            setCurrentLocation(coords);
-            setSelectedLocation(coords);
-            setMapVisible(true);
-        } catch (error) {
-            Alert.alert('Error', 'Could not fetch location. Please try again.');
-        }
-        setIsLoadingLocation(false);
-    };
-
-    const handleConfirmLocation = async () => {
-        if (!selectedLocation) return;
-        try {
-            const reverseGeocode = await Location.reverseGeocodeAsync(selectedLocation);
-            if (reverseGeocode.length > 0) {
-                const addr = reverseGeocode[0];
-                const addressString = [`${addr.streetNumber} ${addr.street}`.trim(), addr.city, addr.region, addr.postalCode].filter(Boolean).join(', ');
-                
-                const newAddress = { id: Math.random().toString(), name: 'New Map Address', details: addressString };
-                setAddresses(prev => [...prev, newAddress]);
-            } else {
-                Alert.alert('Error', 'Could not determine address from this location.');
-            }
-        } catch (error) {
-            Alert.alert('Error', 'Could not determine address. Please try again.');
-        }
-        setMapVisible(false);
-    };
-
-    const renderItem = ({ item }) => (
-        <View style={styles.addressItem}>
-            <View style={styles.addressInfo}>
-                <Text style={styles.addressName}>{item.name}</Text>
-                <Text style={styles.addressDetails}>{item.details}</Text>
+    const renderItem = ({ item }: { item: any }) => {
+        const addressDetails = `${item.street}, ${item.city}, ${item.state} ${item.zip}`;
+        return (
+            <View style={styles.addressItem}>
+                <View style={styles.addressInfo}>
+                    <Text style={styles.addressName}>{item.name}</Text>
+                    <Text style={styles.addressDetails}>{addressDetails}</Text>
+                </View>
+                <View style={styles.buttonContainer}>
+                    <TouchableOpacity onPress={() => handleEditAddress(item)}>
+                        <Ionicons name="create-outline" size={24} color={PALETTE.textSecondary} />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => handleDeleteAddress(item.id)}>
+                        <Ionicons name="trash-outline" size={24} color={PALETTE.danger} />
+                    </TouchableOpacity>
+                </View>
             </View>
-            <TouchableOpacity>
-                <Ionicons name="create-outline" size={24} color={PALETTE.textSecondary} />
-            </TouchableOpacity>
-        </View>
-    );
+        );
+    }
+
+    if (loading) {
+        return (
+            <View style={styles.centered}>
+                <ActivityIndicator size="large" color={PALETTE.primary} />
+            </View>
+        );
+    }
 
     return (
         <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -123,6 +124,12 @@ const SavedAddressesScreen = () => {
                 renderItem={renderItem}
                 keyExtractor={(item) => item.id}
                 contentContainerStyle={styles.listContainer}
+                ListEmptyComponent={() => (
+                    <View style={styles.emptyContainer}>
+                        <Text style={styles.emptyText}>No saved addresses yet.</Text>
+                        <Text style={styles.emptySubText}>Tap "Add New Address" to get started.</Text>
+                    </View>
+                )}
             />
 
             <View style={styles.footer}>
@@ -130,40 +137,6 @@ const SavedAddressesScreen = () => {
                     <Text style={styles.primaryButtonText}>Add New Address</Text>
                 </TouchableOpacity>
             </View>
-            
-            <Modal
-                animationType="slide"
-                transparent={false}
-                visible={isMapVisible}
-                onRequestClose={() => setMapVisible(false)}
-            >
-                <View style={styles.mapContainer}>
-                    {currentLocation ? (
-                        <>
-                            <MapView
-                                style={styles.map}
-                                initialRegion={{
-                                    ...currentLocation,
-                                    latitudeDelta: 0.01,
-                                    longitudeDelta: 0.01,
-                                }}
-                                onRegionChangeComplete={(region) => setSelectedLocation(region)}
-                            />
-                             <View style={styles.mapCenterMarker}>
-                                <Ionicons name="location" size={40} color={PALETTE.primary} />
-                            </View>
-                        </>
-                    ) : <ActivityIndicator style={styles.map} size="large"/>}
-                    <View style={styles.mapControls}>
-                        <TouchableOpacity style={styles.confirmLocationButton} onPress={handleConfirmLocation}>
-                            <Text style={styles.primaryButtonText}>Confirm Location</Text>
-                        </TouchableOpacity>
-                    </View>
-                     <TouchableOpacity style={styles.closeButton} onPress={() => setMapVisible(false)}>
-                        <Ionicons name="close-circle" size={32} color={PALETTE.textPrimary} />
-                    </TouchableOpacity>
-                </View>
-            </Modal>
         </SafeAreaView>
     );
 };
@@ -189,6 +162,7 @@ const styles = StyleSheet.create({
     },
     listContainer: {
         padding: 16,
+        flexGrow: 1,
     },
     addressItem: {
         backgroundColor: PALETTE.card,
@@ -200,6 +174,7 @@ const styles = StyleSheet.create({
     },
     addressInfo: {
         flex: 1,
+        marginRight: 16,
     },
     addressName: {
         fontSize: 16,
@@ -210,6 +185,10 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: PALETTE.textSecondary,
         marginTop: 4,
+    },
+    buttonContainer: {
+        flexDirection: 'row',
+        gap: 16,
     },
     footer: {
         padding: 16,
@@ -227,35 +206,26 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         fontSize: 16,
     },
-    mapContainer: {
+    centered: {
         flex: 1,
-    },
-    map: {
-        ...StyleSheet.absoluteFillObject,
-    },
-    mapControls: {
-        position: 'absolute',
-        bottom: 30,
-        left: 16,
-        right: 16,
-    },
-    confirmLocationButton: {
-        paddingVertical: 16,
-        borderRadius: 12,
-        backgroundColor: PALETTE.primary,
+        justifyContent: 'center',
         alignItems: 'center',
     },
-    closeButton: {
-        position: 'absolute',
-        top: 50,
-        right: 16,
+    emptyContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginTop: 50, 
     },
-    mapCenterMarker: {
-        position: 'absolute',
-        top: '50%',
-        left: '50%',
-        marginLeft: -20,
-        marginTop: -40,
+    emptyText: {
+        fontSize: 18,
+        fontWeight: '600',
+        color: PALETTE.textPrimary,
+    },
+    emptySubText: {
+        fontSize: 14,
+        color: PALETTE.textSecondary,
+        marginTop: 8,
     }
 });
 

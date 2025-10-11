@@ -1,6 +1,6 @@
 
 import { Ionicons } from '@expo/vector-icons';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import React, { useState } from 'react';
 import { StyleSheet, Text, View, TextInput, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -16,11 +16,13 @@ const PALETTE = {
 
 const ContactDetailsScreen = () => {
     const router = useRouter();
-    const [contactNumber, setContactNumber] = useState('+91 9876543210');
+    const params = useLocalSearchParams();
+    const { contact: initialContact } = params;
+    const [contactNumber, setContactNumber] = useState(initialContact as string || '+91 9876543210');
 
     const handleSave = () => {
         Alert.alert('Contact Details Saved', `Your new contact number is: ${contactNumber}`);
-        router.back();
+        router.push({ pathname: '/(tabs)/profile', params: { updatedContact: contactNumber } });
     };
 
     return (

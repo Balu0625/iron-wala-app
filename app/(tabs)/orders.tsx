@@ -1,8 +1,10 @@
 
 import { Ionicons } from '@expo/vector-icons';
-import React from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
+import { auth, db } from '../../firebase';
 
 const PALETTE = {
     primary: "#1193d4",
@@ -12,31 +14,23 @@ const PALETTE = {
 };
 
 const statusStyles = {
-    'Pending Pickup': { bg: '#FEF3C7', text: '#92400E' },
+    'Placed': { bg: '#FEF3C7', text: '#92400E' },
     'In Progress': { bg: '#DBEAFE', text: '#1E40AF' },
     'Delivered': { bg: '#D1FAE5', text: '#065F46' },
     'Cancelled': { bg: '#FEE2E2', text: '#991B1B' },
 };
 
-const currentOrders = [
-    { id: '#IW1051', date: 'Oct 26, 2023', status: 'Pending Pickup', items: '2 Shirts, 1 Pant, 1 Saree' },
-    { id: '#IW1048', date: 'Oct 24, 2023', status: 'In Progress', items: '3 Kurtas, 2 Trousers' },
-];
-
-const pastOrders = [
-    { id: '#IW1045', date: 'Oct 20, 2023', status: 'Delivered', items: '5 Shirts' },
-    { id: '#IW1042', date: 'Oct 15, 2023', status: 'Delivered', items: '2 Sarees, 1 Dress' },
-    { id: '#IW1039', date: 'Oct 10, 2023', status: 'Cancelled', items: '1 Bed Sheet, 2 Pillow Covers' },
-];
-
 const OrderCard = ({ order }) => {
-    const statusStyle = statusStyles[order.status];
+    const statusStyle = statusStyles[order.status] || { bg: PALETTE.subtleLight, text: PALETTE.contentLight };
+    const orderDate = order.createdAt?.toDate ? order.createdAt.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Date not available';
+    const itemSummary = order.orderItems.map(item => `${item.quantity} ${item.name}`).join(', ');
+
     return (
         <TouchableOpacity style={styles.card}>
             <View style={styles.cardHeader}>
                 <View>
-                    <Text style={styles.orderId}>{order.id}</Text>
-                    <Text style={styles.orderDate}>{order.date}</Text>
+                    <Text style={styles.orderId}>{`#${order.id.substring(0, 6).toUpperCase()}`}</Text>
+                    <Text style={styles.orderDate}>{orderDate}</Text>
                 </View>
                 <View style={styles.statusContainer}>
                     <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
@@ -46,37 +40,86 @@ const OrderCard = ({ order }) => {
                 </View>
             </View>
             <View style={styles.cardBody}>
-                <Text style={styles.orderItems}>{order.items}</Text>
+                <Text style={styles.orderItems}>{itemSummary}</Text>
             </View>
         </TouchableOpacity>
     );
 };
 
+const EmptyState = ({ message }) => (
+    <View style={styles.emptyContainer}>
+        <Text style={styles.emptyText}>🌬️</Text>
+        <Text style={styles.emptyText}>{message}</Text>
+    </View>
+);
+
 const OrdersScreen = () => {
+    const [currentOrders, setCurrentOrders] = useState([]);
+    const [pastOrders, setPastOrders] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const user = auth.currentUser;
+
+    useEffect(() => {
+        if (!user) {
+            setLoading(false);
+            return;
+        }
+
+        const ordersRef = collection(db, 'orders');
+        const q = query(ordersRef, where("userId", "==", user.uid), orderBy("createdAt", "desc"));
+
+        const unsubscribe = onSnapshot(q, (querySnapshot) => {
+            const allOrders = [];
+            querySnapshot.forEach((doc) => {
+                allOrders.push({ id: doc.id, ...doc.data() });
+            });
+
+            const current = allOrders.filter(order => ['Placed', 'In Progress'].includes(order.status));
+            const past = allOrders.filter(order => ['Delivered', 'Cancelled'].includes(order.status));
+
+            setCurrentOrders(current);
+            setPastOrders(past);
+            setLoading(false);
+        }, (error) => {
+            console.error("Error fetching orders: ", error);
+            setLoading(false);
+        });
+
+        return () => unsubscribe();
+    }, [user]);
+
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             <View style={styles.header}>
-                <TouchableOpacity style={styles.backButton}>
-                    <Ionicons name="arrow-back" size={24} color={PALETTE.contentLight} />
-                </TouchableOpacity>
                 <Text style={styles.headerTitle}>My Orders</Text>
-                <View style={{ width: 40 }} />
             </View>
 
-            <ScrollView contentContainerStyle={styles.mainContent}>
-                <View>
-                    <Text style={styles.sectionTitle}>Current Orders</Text>
-                    <View style={styles.ordersList}>
-                        {currentOrders.map(order => <OrderCard key={order.id} order={order} />)}
+            {loading ? (
+                <ActivityIndicator style={{ flex: 1, justifyContent: 'center' }} size="large" color={PALETTE.primary} />
+            ) : (
+                <ScrollView contentContainerStyle={styles.mainContent}>
+                    <View>
+                        <Text style={styles.sectionTitle}>Current Orders</Text>
+                        {currentOrders.length > 0 ? (
+                            <View style={styles.ordersList}>
+                                {currentOrders.map(order => <OrderCard key={order.id} order={order} />)}
+                            </View>
+                        ) : (
+                            <EmptyState message="No current orders. Time to schedule a pickup!" />
+                        )}
                     </View>
-                </View>
-                <View>
-                    <Text style={styles.sectionTitle}>Past Orders</Text>
-                    <View style={styles.ordersList}>
-                        {pastOrders.map(order => <OrderCard key={order.id} order={order} />)}
+                    <View>
+                        <Text style={styles.sectionTitle}>Past Orders</Text>
+                        {pastOrders.length > 0 ? (
+                            <View style={styles.ordersList}>
+                                {pastOrders.map(order => <OrderCard key={order.id} order={order} />)}
+                            </View>
+                        ) : (
+                            <EmptyState message="No past orders... yet!" />
+                        )}
                     </View>
-                </View>
-            </ScrollView>
+                </ScrollView>
+            )}
         </SafeAreaView>
     );
 };
@@ -89,16 +132,12 @@ const styles = StyleSheet.create({
     header: {
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'space-between',
+        justifyContent: 'center',
         paddingHorizontal: 16,
         paddingVertical: 12,
         borderBottomWidth: 1,
         borderBottomColor: PALETTE.subtleLight,
         backgroundColor: PALETTE.backgroundLight,
-    },
-    backButton: {
-        padding: 8,
-        marginLeft: -8,
     },
     headerTitle: {
         fontSize: 20,
@@ -139,7 +178,7 @@ const styles = StyleSheet.create({
     },
     orderDate: {
         fontSize: 14,
-        color: `${PALETTE.contentLight}CC`, // 80% opacity
+        color: `${PALETTE.contentLight}CC`,
     },
     statusContainer: {
         flexDirection: 'row',
@@ -159,11 +198,24 @@ const styles = StyleSheet.create({
         paddingTop: 8,
         marginTop: 8,
         borderTopWidth: 1,
-        borderTopColor: `${PALETTE.subtleLight}80`, // 50% opacity
+        borderTopColor: `${PALETTE.subtleLight}80`,
     },
     orderItems: {
         fontSize: 14,
         color: PALETTE.contentLight,
+    },
+    emptyContainer: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 32,
+        backgroundColor: 'white',
+        borderRadius: 8,
+        gap: 8,
+    },
+    emptyText: {
+        fontSize: 16,
+        color: PALETTE.contentLight,
+        textAlign: 'center',
     },
 });
 
