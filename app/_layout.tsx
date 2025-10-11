@@ -5,7 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 import { useAuth } from '../hooks/useAuth';
 import { useEffect } from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { View, Image, StyleSheet } from 'react-native';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 function RootLayoutNav() {
@@ -28,8 +28,11 @@ function RootLayoutNav() {
     return (
         <>
             {loading ? (
-                <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-                    <ActivityIndicator size="large" />
+                <View style={styles.loadingContainer}>
+                    <Image 
+                        source={require('../assets/images/loading.gif')} 
+                        style={styles.loadingImage}
+                    />
                 </View>
             ) : (
                 <Stack>
@@ -41,6 +44,20 @@ function RootLayoutNav() {
         </>
     );
 }
+
+const styles = StyleSheet.create({
+    loadingContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#ffffff',
+    },
+    loadingImage: {
+        width: 200,
+        height: 200,
+        resizeMode: 'contain',
+    },
+});
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
