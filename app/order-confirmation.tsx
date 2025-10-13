@@ -31,17 +31,17 @@ const Section = ({ title, children }) => (
     </View>
 );
 
-const InfoRow = ({ icon, title, subtitle, onPress }) => (
-    <TouchableOpacity onPress={onPress} disabled={!onPress} style={styles.infoRowContainer}>
+const InfoRow = ({ icon, title, subtitle, onPress, disabled }) => (
+    <TouchableOpacity onPress={onPress} disabled={!onPress || disabled} style={styles.infoRowContainer}>
         <View style={styles.infoRow}>
-            <View style={styles.iconContainer}>
-                <Ionicons name={icon} size={24} color={PALETTE.primary} />
+            <View style={[styles.iconContainer, disabled && styles.disabledIcon]}>
+                <Ionicons name={icon} size={24} color={disabled ? PALETTE.textSecondary : PALETTE.primary} />
             </View>
             <View style={styles.infoTextContainer}>
-                <Text style={styles.infoTitle}>{title}</Text>
-                <Text style={styles.infoSubtitle} numberOfLines={2}>{subtitle}</Text>
+                <Text style={[styles.infoTitle, disabled && styles.disabledText]}>{title}</Text>
+                <Text style={[styles.infoSubtitle, disabled && styles.disabledText]} numberOfLines={2}>{subtitle}</Text>
             </View>
-            {onPress && <Ionicons name="chevron-forward" size={20} color={PALETTE.textSecondary} />}
+            {onPress && <Ionicons name="chevron-forward" size={20} color={disabled ? PALETTE.disabled : PALETTE.textSecondary} />}
         </View>
     </TouchableOpacity>
 );
@@ -100,23 +100,13 @@ const OrderConfirmationScreen = () => {
         return orderDetails.items.map(item => `${item.quantity} ${item.name.toLowerCase()}`).join(', ');
     }, [orderDetails.items]);
 
-    const [pickupDate, setPickupDate] = useState(() => {
-        const date = new Date();
-        date.setDate(date.getDate() + 1);
-        date.setHours(10, 0, 0, 0);
-        return date;
-    });
-    const [deliveryDate, setDeliveryDate] = useState(() => {
-        const date = new Date();
-        date.setDate(date.getDate() + 3);
-        date.setHours(14, 0, 0, 0);
-        return date;
-    });
+    const [pickupDate, setPickupDate] = useState(null);
+    const [deliveryDate, setDeliveryDate] = useState(null);
     
     const [addressType, setAddressType] = useState('pickup');
 
     const [showPicker, setShowPicker] = useState(false);
-    const [pickerConfig, setPickerConfig] = useState({ mode: 'date', type: 'pickup' });
+    const [pickerConfig, setPickerConfig] = useState({ mode: 'date', type: 'pickup', tempDate: new Date() });
 
     const [isMapVisible, setMapVisible] = useState(false);
     const [currentLocation, setCurrentLocation] = useState(null);
@@ -124,36 +114,57 @@ const OrderConfirmationScreen = () => {
     const [isLoadingLocation, setIsLoadingLocation] = useState(false);
 
     const onDateChange = (event, selectedDate) => {
-        setShowPicker(Platform.OS === 'ios');
-        if (event.type === 'dismissed') return;
-
-        const currentDate = selectedDate || (pickerConfig.type === 'pickup' ? pickupDate : deliveryDate);
-
-        if (pickerConfig.type === 'pickup') {
-            setPickupDate(currentDate);
-            if (currentDate >= deliveryDate) {
-                const newDeliveryDate = new Date(currentDate);
-                newDeliveryDate.setDate(newDeliveryDate.getDate() + 2);
-                setDeliveryDate(newDeliveryDate);
+        const isIOS = Platform.OS === 'ios';
+        setShowPicker(isIOS);
+        if (event.type === 'dismissed' || !selectedDate) {
+            if (!isIOS) setShowPicker(false);
+            return;
+        }
+    
+        if (isIOS) {
+            if (pickerConfig.type === 'pickup') {
+                setPickupDate(selectedDate);
+                setDeliveryDate(null); // Reset delivery date
+            } else {
+                setDeliveryDate(selectedDate);
             }
         } else {
-            setDeliveryDate(currentDate);
-        }
-
-        if (pickerConfig.mode === 'date') {
-            setPickerConfig({ ...pickerConfig, mode: 'time' });
-            if (Platform.OS !== 'ios') {
-                setShowPicker(true);
+            // Android-specific logic to handle date and time separately
+            if (pickerConfig.mode === 'date') {
+                const newTempDate = new Date(selectedDate);
+                setPickerConfig({ ...pickerConfig, mode: 'time', tempDate: newTempDate });
+                setShowPicker(true); // Show time picker next
+            } else { // mode === 'time'
+                const { tempDate } = pickerConfig;
+                const finalDate = new Date(tempDate);
+                finalDate.setHours(selectedDate.getHours());
+                finalDate.setMinutes(selectedDate.getMinutes());
+    
+                if (pickerConfig.type === 'pickup') {
+                    setPickupDate(finalDate);
+                    setDeliveryDate(null); // Reset delivery date
+                } else {
+                    setDeliveryDate(finalDate);
+                }
+                setShowPicker(false); // Hide picker after time is set
             }
         }
     };
+    
 
     const showDatepicker = (type) => {
-        setPickerConfig({ mode: 'date', type });
+        const isIOS = Platform.OS === 'ios';
+        const mode = isIOS ? 'datetime' : 'date';
+        let initialDate = new Date();
+        if (type === 'pickup' && pickupDate) initialDate = pickupDate;
+        if (type === 'delivery' && deliveryDate) initialDate = deliveryDate;
+
+        setPickerConfig({ mode, type, tempDate: initialDate });
         setShowPicker(true);
     };
 
     const formatDateTime = (date) => {
+        if (!date) return 'Not selected';
         const dateString = date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
         const timeString = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
         return `${dateString}, ${timeString}`;
@@ -219,23 +230,22 @@ const OrderConfirmationScreen = () => {
     };
 
     const handleConfirmOrder = async () => {
-        console.log("handleConfirmOrder called"); // Checkpoint 1
         const userId = auth.currentUser?.uid;
         if (!userId) {
-            console.log("User not authenticated"); // Checkpoint 2
             Alert.alert("Authentication Error", "You must be logged in to place an order.");
             return;
         }
 
-        console.log("User authenticated with ID:", userId); // Checkpoint 3
-
         if (orderDetails.items.length === 0) {
-            console.log("Order has no items"); // Checkpoint 4
             Alert.alert("Empty Order", "You cannot place an order with no items.");
             return;
         }
 
-        console.log("Order details are valid, proceeding to save..."); // Checkpoint 5
+        if (!pickupDate || !deliveryDate) {
+            Alert.alert("Incomplete Schedule", "Please select both pickup and delivery times.");
+            return;
+        }
+
         setIsLoading(true);
 
         try {
@@ -252,17 +262,13 @@ const OrderConfirmationScreen = () => {
                 createdAt: serverTimestamp(),
             };
 
-            console.log("Saving order data:", JSON.stringify(orderData, null, 2)); // Checkpoint 6
-
             await addDoc(ordersRef, orderData);
-
-            console.log("Order successfully saved to Firestore"); // Checkpoint 7
 
             Alert.alert("Order Placed!", "Your order has been successfully placed.");
             router.replace('/(tabs)/'); // Navigate to home screen
 
         } catch (error) {
-            console.error("Error placing order: ", error); // Checkpoint 8 (Error)
+            console.error("Error placing order: ", error);
             Alert.alert("Order Failed", "There was an issue placing your order. Please try again.");
         } finally {
             setIsLoading(false);
@@ -284,12 +290,12 @@ const OrderConfirmationScreen = () => {
             <ScrollView contentContainerStyle={styles.scrollContent}>
                 <Section title="Order Summary">
                     <InfoRow icon="shirt-outline" title="Clothing Items" subtitle={itemSummary || 'No items selected'} />
-                    <InfoRow icon="cash-outline" title="Total Cost" subtitle={`$${orderDetails.total.toFixed(2)}`} />
+                    <InfoRow icon="cash-outline" title="Total Cost" subtitle={`₹${orderDetails.total.toFixed(2)}`} />
                 </Section>
 
                 <Section title="Schedule">
                     <InfoRow icon="calendar-outline" title="Pickup" subtitle={formatDateTime(pickupDate)} onPress={() => showDatepicker('pickup')} />
-                    <InfoRow icon="calendar-outline" title="Delivery" subtitle={formatDateTime(deliveryDate)} onPress={() => showDatepicker('delivery')} />
+                    <InfoRow icon="calendar-outline" title="Delivery" subtitle={formatDateTime(deliveryDate)} onPress={() => showDatepicker('delivery')} disabled={!pickupDate} />
                 </Section>
 
                 <Section title="Addresses">
@@ -346,12 +352,20 @@ const OrderConfirmationScreen = () => {
 
                 {showPicker && (
                     <DateTimePicker
-                        value={pickerConfig.type === 'pickup' ? pickupDate : deliveryDate}
+                        value={
+                            pickerConfig.type === 'pickup'
+                                ? pickupDate || new Date()
+                                : deliveryDate || (pickupDate ? new Date(pickupDate.getTime() + 60 * 60 * 1000) : new Date())
+                        }
                         mode={pickerConfig.mode as any}
                         is24Hour={false}
                         display="default"
                         onChange={onDateChange}
-                        minimumDate={pickerConfig.type === 'pickup' ? new Date(new Date().setDate(new Date().getDate() + 1)) : new Date(pickupDate.getTime() + 48 * 60 * 60 * 1000)}
+                        minimumDate={
+                            pickerConfig.type === 'delivery' && pickupDate
+                                ? new Date(pickupDate.getTime() + 60 * 60 * 1000) // 1 hour after pickup
+                                : new Date() // Today for pickup
+                        }
                     />
                 )}
             </ScrollView>
@@ -477,6 +491,12 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: PALETTE.textSecondary,
         marginTop: 2,
+    },
+    disabledIcon: {
+        backgroundColor: PALETTE.disabled,
+    },
+    disabledText: {
+        color: PALETTE.textSecondary,
     },
     addressTypeContainer: {
         flexDirection: 'row',

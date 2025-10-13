@@ -1,11 +1,12 @@
 
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter, useLocalSearchParams } from 'expo-router';
-import React, { useState, useEffect } from 'react';
+import { useRouter, useFocusEffect } from 'expo-router';
+import React, { useState, useCallback } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { signOut } from 'firebase/auth';
-import { auth } from '../../firebase';
+import { doc, getDoc } from 'firebase/firestore';
+import { auth, db } from '../../firebase';
 
 const PALETTE = {
     primary: "#1193d4",
@@ -16,14 +17,6 @@ const PALETTE = {
     textTertiary: "#94a3b8",
     border: "#e2e8f0",
     danger: "#ef4444",
-};
-
-const initialUser = {
-    name: 'Arjun Kapoor',
-    joined: 'Member since 2022',
-    avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCA9uhYoyCKv7reYaUWReGpjEyTvmatk_mWQLCmhCbcIleVb46brqsGsDFGLXhOBxI6QD5vzjigGHmy92GB0LpXbv2Ilx0xtbISvhP-e_moNVS2CsOxkvy4sOscF2t3khzRcs8-hG5bCkmJx_gRTX1KFbsUlwyyJ142HiOoNg4pyQ435PftZdvoGOrPRnSGQk3JgeNCe_OVogaM9z4seVQ82mmqBt-SdY4SCaatdMgzdsxvKGKyUElMx-T7XZdFkSlEg6s9EccxkrA',
-    contact: '+91 9876543210',
-    address: '23, Sector 15, Chandigarh',
 };
 
 const AccountInfo = ({ user, onNavigate }) => (
@@ -58,7 +51,7 @@ const Manage = ({ onNavigate }) => (
     <View style={styles.menuGroup}>
         <Text style={styles.sectionTitle}>Manage</Text>
         <View style={styles.card}>
-            <TouchableOpacity style={[styles.menuItem, styles.borderBottom]} onPress={() => Alert.alert('Coming Soon', 'This feature is not yet available.')}>
+            <TouchableOpacity style={[styles.menuItem, styles.borderBottom]} onPress={() => onNavigate('(tabs)/orders')}>
                 <View style={styles.iconContainer}>
                     <Ionicons name="time-outline" size={24} color={PALETTE.primary} />
                 </View>
@@ -85,19 +78,53 @@ const Manage = ({ onNavigate }) => (
 
 const ProfileScreen = () => {
     const router = useRouter();
-    const params = useLocalSearchParams();
-    const { updatedContact } = params;
-    const [user, setUser] = useState(initialUser);
+    const [user, setUser] = useState({
+        name: 'Loading...',
+        joined: 'Loading...',
+        avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCA9uhYoyCKv7reYaUWReGpjEyTvmatk_mWQLCmhCbcIleVb46brqsGsDFGLXhOBxI6QD5vzjigGHmy92GB0LpXbv2Ilx0xtbISvhP-e_moNVS2CsOxkvy4sOscF2t3khzRcs8-hG5bCkmJx_gRTX1KFbsUlwyyJ142HiOoNg4pyQ435PftZdvoGOrPRnSGQk3JgeNCe_OVogaM9z4seVQ82mmqBt-SdY4SCaatdMgzdsxvKGKyUElMx-T7XZdFkSlEg6s9EccxkrA',
+        contact: 'Loading...',
+        address: 'Loading...',
+    });
 
-    useEffect(() => {
-        if (updatedContact) {
-            setUser(prevUser => ({ ...prevUser, contact: updatedContact as string }));
+    const fetchUserData = useCallback(async () => {
+        const currentUser = auth.currentUser;
+        if (currentUser) {
+            const userDocRef = doc(db, 'users', currentUser.uid);
+            const userDocSnap = await getDoc(userDocRef);
+
+            const creationYear = new Date(currentUser.metadata.creationTime).getFullYear();
+            const joinedString = `Member since ${creationYear}`;
+
+            let userName = currentUser.displayName || 'No name provided';
+            let userContact = 'Not provided';
+            let userAddress = 'Not provided';
+
+            if (userDocSnap.exists()) {
+                const userData = userDocSnap.data();
+                userName = userData.fullName || userName;
+                userContact = userData.contactNumber || 'Not provided';
+                userAddress = userData.address || 'Not provided';
+            }
+
+            setUser(prevUser => ({
+                ...prevUser,
+                name: userName,
+                contact: userContact,
+                address: userAddress,
+                joined: joinedString,
+            }));
         }
-    }, [updatedContact]);
+    }, []);
+
+    useFocusEffect(
+        useCallback(() => {
+            fetchUserData();
+        }, [fetchUserData])
+    );
 
     const handleNavigate = (screen) => {
         if (screen === 'contact-details') {
-            router.push({ pathname: `/${screen}`, params: { contact: user.contact } });
+            router.push({ pathname: `/${screen}`, params: { contact: user.contact === 'Not provided' ? '' : user.contact } });
         } else {
             router.push(`/${screen}`);
         }
@@ -113,7 +140,7 @@ const ProfileScreen = () => {
                     text: "Logout",
                     onPress: async () => {
                         await signOut(auth);
-                        // The useAuth hook will automatically navigate the user
+                        // The useAuth hook will automatically navigate the user to the login screen
                     },
                     style: "destructive",
                 },

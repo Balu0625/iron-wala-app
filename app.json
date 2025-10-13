@@ -1,11 +1,12 @@
 {
   "expo": {
-    "name": "laundry-app",
-    "slug": "laundry-app",
+    "name": "iron-wala-app",
+    "slug": "iron-wala-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
+    "scheme": "iron-wala-app",
     "splash": {
       "image": "./assets/icon.png",
       "resizeMode": "contain",
@@ -18,13 +19,20 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "package": "com.balu25.ironwalaapp"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "expo-router"
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "290e2a4b-c95b-46af-be84-53e7840396ab"
+      }
+    }
   }
 }

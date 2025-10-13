@@ -2,8 +2,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { Link } from 'expo-router';
-import React, { useState, useMemo } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 // Define the color palette for the light theme, as requested.
@@ -28,29 +28,50 @@ interface Item {
 const INITIAL_ITEMS: Item[] = [
     {
         name: 'Shirts',
-        price: 1.50,
-        quantity: 2,
+        price: 20,
+        quantity: 0,
         image: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDoe1uPr70OT191sdQiYqyumBqArpHAfUAClPhutjGLNqSDpFHxWNLBAFWOzX-snWTTekPMe-gh81gd8F-TQ8zoByLVHfPeJzVCWA_BAzKhGpOl29soSp_Y7L6NUzWRxhcqzel6Pz3Trot0XZWLVJgbI9srh5Xpj3MTJANdUvLkYlVb4D6iw1S16FZoPUbnEFso1971p6i5ZgdhVas1UHm2GX-xqgSvII9Vaaf1ktooflKL9sEKnzihm7NLY-Aj-_Jd2UOFq8NkotI',
         info: 'Iron cotton shirts on high heat, preferably while damp.'
     },
     {
         name: 'Pants',
-        price: 2.00,
-        quantity: 1,
+        price: 10,
+        quantity: 0,
         image: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDWE1KkM8LTwEiAHK-dWin4oil7cc0mJ02AxRlopRrj1Tp7HBmofLW5jaMJlgG16o6X75iCu-Qv95A0sNy9MvswzQZRod5aEFIKRno9pspc4UKU78Gd02e4cikxlvgPWaMYDhbgzHlTz55uuOAHSgFHr3LbpU3GvzviV45ZAq-ECylHo_c3d3TxZOUSDKQ6SimkoWkBcrPq-WSCUYb01nyPTQKKu4bfNGw336m1n4IK-6kh9K92-CDr0H9asbMsSUKcTr790kdeYvg',
         info: "Iron pants inside out to protect the fabric's sheen." // Fixed syntax error
     },
     {
         name: 'Sarees',
-        price: 3.50,
+        price: 50,
         quantity: 0,
         image: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAGjV9Ag2yZAuAE8ZTXoy40R2pZT_wHYLNwKb3WO4hq6uxewvSx7HpGLkqICUGbfIKIoxlbVC9BmwCYVyGknChxoMfRDlFFzQ9xbnNK5X3C1rJt1o_NB702V09zx53lMV07gYm5oYXwYV4i4hIPOPz1TblZ7R3vvmaXYVpNZIhr_th2n7nJs0cIanscZoTQm_d09vn-lmzAleVq3Na6rlcirzqfbEiZk-6MmuHShHANlS9JcTRfe3YEscALzlg65nBZQfHwpNd_vPM',
         info: 'Use low to medium heat for delicate fabrics like silk.'
     },
 ];
 
+const BANNERS = [
+    {
+        icon: 'sparkles-outline',
+        title: 'Benefits of Ironing',
+        description: 'Ironing kills germs and gives your clothes a fresh, crisp look.',
+    },
+    {
+        icon: 'pricetag-outline',
+        title: 'Special Offer!',
+        description: 'Get 20% off your first order. Use code: FIRST20',
+    },
+    {
+        icon: 'shirt-outline',
+        title: 'Garment Care Tip',
+        description: 'Always check the care label before ironing to avoid damage.',
+    },
+];
+
 const HomeScreen = () => {
     const [items, setItems] = useState<Item[]>(INITIAL_ITEMS);
+    const scrollViewRef = useRef<ScrollView>(null);
+    const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
+
 
     // Added types for function arguments for type safety.
     const handleQuantityChange = (index: number, delta: number) => {
@@ -64,7 +85,7 @@ const HomeScreen = () => {
 
     const { subtotal, total, cartCount, serviceFee } = useMemo(() => {
         const sub = items.reduce((acc, item) => acc + item.price * item.quantity, 0);
-        const fee = sub > 0 ? 1.00 : 0;
+        const fee = sub > 0 ? 10 : 0;
         const count = items.reduce((acc, item) => acc + item.quantity, 0);
         return { subtotal: sub, serviceFee: fee, total: sub + fee, cartCount: count };
     }, [items]);
@@ -73,6 +94,21 @@ const HomeScreen = () => {
         const activeItems = items.filter(item => item.quantity > 0);
         return { items: activeItems, total };
     }, [items, total]);
+
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setCurrentBannerIndex(prevIndex => {
+                const nextIndex = (prevIndex + 1) % BANNERS.length;
+                scrollViewRef.current?.scrollTo({
+                    x: nextIndex * 336, // Width of carousel item (320) + margin (16)
+                    animated: true,
+                });
+                return nextIndex;
+            });
+        }, 3000); // Change banner every 3 seconds
+
+        return () => clearInterval(interval);
+    }, []);
 
     return (
         <View style={{ flex: 1, backgroundColor: PALETTE.background }}>
@@ -93,22 +129,29 @@ const HomeScreen = () => {
                         </View>
 
                         <ScrollView contentContainerStyle={styles.mainContent}>
-                            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.carousel} contentContainerStyle={{ paddingHorizontal: 16 }}>
-                                <View style={styles.carouselItem}>
-                                    <Ionicons name="sparkles-outline" size={40} color={PALETTE.primary} />
-                                    <Text style={styles.carouselTitle}>Benefits of Ironing</Text>
-                                    <Text style={styles.carouselText}>Ironing kills germs and gives your clothes a fresh, crisp look.</Text>
-                                </View>
-                                <View style={styles.carouselItem}>
-                                    <Ionicons name="pricetag-outline" size={40} color={PALETTE.primary} />
-                                    <Text style={styles.carouselTitle}>Special Offer!</Text>
-                                    <Text style={styles.carouselText}>Get 20% off your first order. Use code: FIRST20</Text>
-                                </View>
-                                <View style={styles.carouselItem}>
-                                    <Ionicons name="shirt-outline" size={40} color={PALETTE.primary} />
-                                    <Text style={styles.carouselTitle}>Garment Care Tip</Text>
-                                    <Text style={styles.carouselText}>Always check the care label before ironing to avoid damage.</Text>
-                                </View>
+                            <ScrollView
+                                ref={scrollViewRef}
+                                horizontal
+                                showsHorizontalScrollIndicator={false}
+                                style={styles.carousel}
+                                contentContainerStyle={{ paddingHorizontal: 16 }}
+                                scrollEventThrottle={16} // Needed for smooth scrolling on iOS
+                                onMomentumScrollEnd={event => {
+                                    if (Platform.OS !== 'web') {
+                                        const newIndex = Math.round(
+                                            event.nativeEvent.contentOffset.x / 336
+                                        );
+                                        setCurrentBannerIndex(newIndex);
+                                    }
+                                }}
+                            >
+                                {BANNERS.map((banner, index) => (
+                                    <View key={index} style={styles.carouselItem}>
+                                        <Ionicons name={banner.icon as any} size={40} color={PALETTE.primary} />
+                                        <Text style={styles.carouselTitle}>{banner.title}</Text>
+                                        <Text style={styles.carouselText}>{banner.description}</Text>
+                                    </View>
+                                ))}
                             </ScrollView>
 
                             <View style={styles.itemsSection}>
@@ -123,7 +166,7 @@ const HomeScreen = () => {
                                                         <Text style={styles.itemName}>{item.name}</Text>
                                                         <Ionicons name="information-circle-outline" size={16} color={`${PALETTE.content}80`} />
                                                     </View>
-                                                    <Text style={styles.itemPrice}>{`$${item.price.toFixed(2)} / item`}</Text>
+                                                    <Text style={styles.itemPrice}>{`₹${item.price.toFixed(2)} / item`}</Text>
                                                 </View>
                                             </View>
                                             <View style={styles.quantitySelector}>
@@ -132,7 +175,7 @@ const HomeScreen = () => {
                                                 </TouchableOpacity>
                                                 <View style={styles.quantityContainer}>
                                                     <Text style={styles.quantityText}>{item.quantity}</Text>
-                                                    <Text style={styles.quantityPrice}>{`$${(item.price * item.quantity).toFixed(2)}`}</Text>
+                                                    <Text style={styles.quantityPrice}>{`₹${(item.price * item.quantity).toFixed(2)}`}</Text>
                                                 </View>
                                                 <TouchableOpacity style={styles.quantityButton} onPress={() => handleQuantityChange(index, 1)}>
                                                     <Text style={styles.quantityButtonText}>+</Text>
@@ -149,15 +192,15 @@ const HomeScreen = () => {
                         <View style={styles.summaryContainer}>
                             <View style={styles.summaryRow}>
                                 <Text style={styles.summaryText}>Subtotal</Text>
-                                <Text style={styles.summaryText}>{`$${subtotal.toFixed(2)}`}</Text>
+                                <Text style={styles.summaryText}>{`₹${subtotal.toFixed(2)}`}</Text>
                             </View>
                             <View style={styles.summaryRow}>
                                 <Text style={styles.summaryText}>Service Fee</Text>
-                                <Text style={styles.summaryText}>{`$${serviceFee.toFixed(2)}`}</Text>
+                                <Text style={styles.summaryText}>{`₹${serviceFee.toFixed(2)}`}</Text>
                             </View>
                             <View style={[styles.summaryRow, { marginTop: 8 }]}>
                                 <Text style={styles.totalText}>Total</Text>
-                                <Text style={styles.totalText}>{`$${total.toFixed(2)}`}</Text>
+                                <Text style={styles.totalText}>{`₹${total.toFixed(2)}`}</Text>
                             </View>
                             <Link href={{ pathname: "/order-confirmation", params: { order: JSON.stringify(orderDetails) } }} style={[styles.proceedButton, cartCount === 0 && styles.disabledButton]} disabled={cartCount === 0} asChild>
                                 <TouchableOpacity>

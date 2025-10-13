@@ -4,6 +4,8 @@ import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import React, { useState } from 'react';
 import { StyleSheet, Text, View, TextInput, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { doc, updateDoc } from 'firebase/firestore';
+import { auth, db } from '../firebase';
 
 const PALETTE = {
     primary: "#1193d4",
@@ -18,12 +20,24 @@ const ContactDetailsScreen = () => {
     const router = useRouter();
     const params = useLocalSearchParams();
     const { contact: initialContact } = params;
-    const [contactNumber, setContactNumber] = useState(initialContact as string || '+91 9876543210');
+    const [contactNumber, setContactNumber] = useState(initialContact as string || '');
 
-    const handleSave = () => {
-        Alert.alert('Contact Details Saved', `Your new contact number is: ${contactNumber}`);
-        router.push({ pathname: '/(tabs)/profile', params: { updatedContact: contactNumber } });
+    const handleSave = async () => {
+        if (auth.currentUser) {
+            const userDocRef = doc(db, 'users', auth.currentUser.uid);
+            try {
+                await updateDoc(userDocRef, {
+                    contactNumber: contactNumber,
+                });
+                Alert.alert('Contact Details Saved', `Your new contact number is: ${contactNumber}`);
+                router.push({ pathname: '/(tabs)/profile', params: { updatedContact: contactNumber } });
+            } catch (error) {
+                console.error("Error updating contact details:", error);
+                Alert.alert('Error', 'Failed to save contact details. Please try again.');
+            }
+        }
     };
+
 
     return (
         <SafeAreaView style={styles.container} edges={['top', 'bottom']}>

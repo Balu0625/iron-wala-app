@@ -5,8 +5,9 @@ import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 import { useAuth } from '../hooks/useAuth';
 import { useEffect } from 'react';
-import { View, Image, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { Image } from 'expo-image';
 
 function RootLayoutNav() {
     const { user, loading } = useAuth();
@@ -55,7 +56,6 @@ const styles = StyleSheet.create({
     loadingImage: {
         width: 200,
         height: 200,
-        resizeMode: 'contain',
     },
 });
 
