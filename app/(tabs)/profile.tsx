@@ -5,7 +5,7 @@ import React, { useState, useCallback } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { signOut } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, getDocs } from 'firebase/firestore';
 import { auth, db } from '../../firebase';
 
 const PALETTE = {
@@ -103,7 +103,14 @@ const ProfileScreen = () => {
                 const userData = userDocSnap.data();
                 userName = userData.fullName || userName;
                 userContact = userData.contactNumber || 'Not provided';
-                userAddress = userData.address || 'Not provided';
+            }
+
+            const addressesRef = collection(db, 'users', currentUser.uid, 'addresses');
+            const addressesSnap = await getDocs(addressesRef);
+            const addressCount = addressesSnap.size;
+            
+            if (addressCount > 0) {
+                userAddress = `${addressCount} address${addressCount > 1 ? 'es' : ''} saved`;
             }
 
             setUser(prevUser => ({

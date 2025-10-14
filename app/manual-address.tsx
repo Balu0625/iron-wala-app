@@ -2,7 +2,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, TextInput, Alert, ActivityIndicator } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, TextInput, Alert, ActivityIndicator, Modal, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { doc, setDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../firebase';
@@ -13,6 +13,54 @@ const PALETTE = {
     card: "white",
     textPrimary: "#1f2937",
     textSecondary: "#4b5563",
+    border: "#e5e7eb",
+    disabled: "#d1d5db",
+};
+
+const indianStates = {
+    "Andhra Pradesh": ["Vijayawada", "Guntur", "Nellore", "Kurnool"],
+    "Telangana": ["Hyderabad", "Warangal", "Nizamabad"],
+    "Tamil Nadu": ["Chennai", "Coimbatore", "Madurai"],
+    "Karnataka": ["Bengaluru", "Mysuru", "Hubballi"],
+};
+
+const LocationModal = ({ visible, onClose, onSelect, type, selectedState }) => {
+    const data = type === 'state' ? Object.keys(indianStates) : indianStates[selectedState] || [];
+
+    const handleSelect = (item) => {
+        if ((type === 'state' && item !== 'Andhra Pradesh') || (type === 'city' && item !== 'Vijayawada')) {
+            Alert.alert(
+                "Service not available",
+                "We are currently only available in Vijayawada, Andhra Pradesh. We will be expanding to other locations soon!",
+                [{ text: "OK" }]
+            );
+        } else {
+            onSelect(item);
+            onClose();
+        }
+    };
+
+    return (
+        <Modal visible={visible} animationType="slide" transparent>
+            <View style={styles.modalContainer}>
+                <View style={styles.modalContent}>
+                    <Text style={styles.modalTitle}>Select {type}</Text>
+                    <FlatList
+                        data={data}
+                        keyExtractor={(item) => item}
+                        renderItem={({ item }) => (
+                            <TouchableOpacity onPress={() => handleSelect(item)}>
+                                <Text style={styles.modalItem}>{item}</Text>
+                            </TouchableOpacity>
+                        )}
+                    />
+                    <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+                        <Text style={styles.closeButtonText}>Close</Text>
+                    </TouchableOpacity>
+                </View>
+            </View>
+        </Modal>
+    );
 };
 
 const ManualAddressScreen = () => {
@@ -26,6 +74,8 @@ const ManualAddressScreen = () => {
     const [state, setState] = useState('');
     const [zip, setZip] = useState('');
     const [loading, setLoading] = useState(false);
+    const [isStateModalVisible, setIsStateModalVisible] = useState(false);
+    const [isCityModalVisible, setIsCityModalVisible] = useState(false);
 
     const isEditing = !!id;
 
@@ -51,20 +101,28 @@ const ManualAddressScreen = () => {
             return;
         }
 
+        if (state !== 'Andhra Pradesh' || city !== 'Vijayawada') {
+            Alert.alert(
+                "Service not available",
+                "We apologize, but our service is currently limited to Vijayawada, Andhra Pradesh. We are working on expanding to more locations soon!",
+                [{ text: "OK" }]
+            );
+            return;
+        }
+
         setLoading(true);
 
         try {
             const userDocRef = doc(db, 'users', userId);
-
-            // Ensure the user document exists before trying to add a subcollection
             await setDoc(userDocRef, { email: auth.currentUser?.email }, { merge: true });
 
+            const addressData = { name, street, city, state, zip };
             if (isEditing) {
                 const addressRef = doc(userDocRef, 'addresses', id as string);
-                await setDoc(addressRef, { name, street, city, state, zip }, { merge: true });
+                await setDoc(addressRef, addressData, { merge: true });
             } else {
                 const addressesRef = collection(userDocRef, 'addresses');
-                await addDoc(addressesRef, { name, street, city, state, zip, createdAt: serverTimestamp() });
+                await addDoc(addressesRef, { ...addressData, createdAt: serverTimestamp() });
             }
             router.back();
         } catch (error) {
@@ -87,38 +145,49 @@ const ManualAddressScreen = () => {
             </View>
 
             <View style={styles.form}>
-                <TextInput
-                    style={styles.input}
-                    placeholder="Address Name (e.g., Home, Work)"
-                    value={name}
-                    onChangeText={setName}
-                />
-                 <TextInput
-                    style={styles.input}
-                    placeholder="Street Address"
-                    value={street}
-                    onChangeText={setStreet}
-                />
-                <TextInput
-                    style={styles.input}
-                    placeholder="City"
-                    value={city}
-                    onChangeText={setCity}
-                />
-                <TextInput
-                    style={styles.input}
-                    placeholder="State"
-                    value={state}
-                    onChangeText={setState}
-                />
-                <TextInput
-                    style={styles.input}
-                    placeholder="ZIP Code"
-                    value={zip}
-                    onChangeText={setZip}
-                    keyboardType="numeric"
-                />
+                <TextInput style={styles.input} placeholder="Address Name (e.g., Home, Work)" value={name} onChangeText={setName} />
+                <TextInput style={styles.input} placeholder="Street Address" value={street} onChangeText={setStreet} />
+                
+                <TouchableOpacity onPress={() => setIsStateModalVisible(true)}>
+                    <TextInput
+                        style={[styles.input, { color: state ? PALETTE.textPrimary : PALETTE.disabled } ]}
+                        placeholder="State"
+                        value={state}
+                        editable={false}
+                    />
+                </TouchableOpacity>
+
+                <TouchableOpacity onPress={() => {
+                    if (!state) {
+                        Alert.alert("Please select a state first.");
+                        return;
+                    }
+                     setIsCityModalVisible(true)
+                }}>
+                    <TextInput
+                        style={[styles.input, { color: city ? PALETTE.textPrimary : PALETTE.disabled } ]}
+                        placeholder="City"
+                        value={city}
+                        editable={false}
+                    />
+                </TouchableOpacity>
+
+                <TextInput style={styles.input} placeholder="PIN Code" value={zip} onChangeText={setZip} keyboardType="numeric" />
             </View>
+
+            <LocationModal
+                visible={isStateModalVisible}
+                onClose={() => setIsStateModalVisible(false)}
+                onSelect={(selected) => setState(selected)}
+                type="state"
+            />
+            <LocationModal
+                visible={isCityModalVisible}
+                onClose={() => setIsCityModalVisible(false)}
+                onSelect={(selected) => setCity(selected)}
+                type="city"
+                selectedState={state}
+            />
 
             <View style={styles.footer}>
                 <TouchableOpacity style={styles.primaryButton} onPress={handleSaveAddress} disabled={loading}>
@@ -174,6 +243,44 @@ const styles = StyleSheet.create({
         color: 'white',
         fontWeight: 'bold',
         fontSize: 16,
+    },
+    modalContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0,0,0,0.5)',
+    },
+    modalContent: {
+        backgroundColor: PALETTE.card,
+        borderRadius: 12,
+        padding: 24,
+        width: '80%',
+        maxHeight: '80%',
+    },
+    modalTitle: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        marginBottom: 20,
+        textAlign: 'center',
+        color: PALETTE.textPrimary,
+    },
+    modalItem: {
+        paddingVertical: 16,
+        fontSize: 18,
+        borderBottomWidth: 1,
+        borderBottomColor: PALETTE.border,
+        color: PALETTE.textPrimary,
+    },
+    closeButton: {
+        marginTop: 20,
+        backgroundColor: PALETTE.primary,
+        borderRadius: 8,
+        padding: 12,
+        alignItems: 'center',
+    },
+    closeButtonText: {
+        color: 'white',
+        fontWeight: 'bold',
     },
 });
 

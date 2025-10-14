@@ -1,6 +1,6 @@
 
 import { Ionicons } from '@expo/vector-icons';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, FlatList, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,13 +18,16 @@ const PALETTE = {
 
 const SavedAddressesScreen = () => {
     const router = useRouter();
+    const params = useLocalSearchParams();
+    const { from, addressType, order } = params;
+    const isSelectionMode = from === 'order-confirmation';
+
     const [addresses, setAddresses] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const userId = auth.currentUser?.uid;
         if (!userId) {
-            // This case should not happen if the auth guard in _layout is working
             setLoading(false);
             return;
         }
@@ -38,21 +41,33 @@ const SavedAddressesScreen = () => {
             setLoading(false);
         }, (error) => {
             console.error("Error fetching addresses: ", error);
-            // The user will see this alert.
             Alert.alert("Error", "Could not fetch addresses. Please check your connection and try again.");
             setLoading(false);
         });
 
-        // Unsubscribe from the listener when the component unmounts
         return () => unsubscribe();
     }, []);
 
+    const handleSelectAddress = (address) => {
+        if (isSelectionMode) {
+            const fullAddress = `${address.street}, ${address.city}, ${address.state} ${address.zip}`;
+            router.replace({
+                pathname: '/order-confirmation',
+                params: { selectedAddress: fullAddress, addressType: addressType, order: order },
+            });
+        } 
+    };
+
     const handleAddNewAddress = () => {
-        router.push('/manual-address');
+        const routeParams: any = { from: from, addressType: addressType, order: order };
+        if (isSelectionMode) {
+            routeParams.from = 'order-confirmation';
+        }
+        router.push({ pathname: '/manual-address', params: routeParams });
     };
 
     const handleEditAddress = (address: any) => {
-        router.push({ pathname: '/manual-address', params: address });
+        router.push({ pathname: '/manual-address', params: { ...address, from: from, addressType: addressType, order: order } });
     };
 
     const handleDeleteAddress = (id: string) => {
@@ -83,20 +98,28 @@ const SavedAddressesScreen = () => {
     const renderItem = ({ item }: { item: any }) => {
         const addressDetails = `${item.street}, ${item.city}, ${item.state} ${item.zip}`;
         return (
-            <View style={styles.addressItem}>
-                <View style={styles.addressInfo}>
-                    <Text style={styles.addressName}>{item.name}</Text>
-                    <Text style={styles.addressDetails}>{addressDetails}</Text>
+            <TouchableOpacity onPress={() => handleSelectAddress(item)} disabled={!isSelectionMode}>
+                <View style={styles.addressItem}>
+                    <View style={styles.addressInfo}>
+                        <Text style={styles.addressName}>{item.name}</Text>
+                        <Text style={styles.addressDetails}>{addressDetails}</Text>
+                    </View>
+                    <View style={styles.buttonContainer}>
+                        {!isSelectionMode ? (
+                            <>
+                                <TouchableOpacity onPress={() => handleEditAddress(item)}>
+                                    <Ionicons name="create-outline" size={24} color={PALETTE.textSecondary} />
+                                </TouchableOpacity>
+                                <TouchableOpacity onPress={() => handleDeleteAddress(item.id)}>
+                                    <Ionicons name="trash-outline" size={24} color={PALETTE.danger} />
+                                </TouchableOpacity>
+                            </>
+                        ) : (
+                            <Ionicons name="chevron-forward-outline" size={24} color={PALETTE.primary} />
+                        )}
+                    </View>
                 </View>
-                <View style={styles.buttonContainer}>
-                    <TouchableOpacity onPress={() => handleEditAddress(item)}>
-                        <Ionicons name="create-outline" size={24} color={PALETTE.textSecondary} />
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => handleDeleteAddress(item.id)}>
-                        <Ionicons name="trash-outline" size={24} color={PALETTE.danger} />
-                    </TouchableOpacity>
-                </View>
-            </View>
+            </TouchableOpacity>
         );
     }
 
@@ -115,7 +138,7 @@ const SavedAddressesScreen = () => {
                 <TouchableOpacity onPress={() => router.back()}>
                     <Ionicons name="arrow-back" size={24} color={PALETTE.textSecondary} />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Saved Addresses</Text>
+                <Text style={styles.headerTitle}>{isSelectionMode ? 'Select Address' : 'Saved Addresses'}</Text>
                 <View style={{ width: 24 }} />
             </View>
 

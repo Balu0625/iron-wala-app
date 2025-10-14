@@ -73,7 +73,7 @@ const OrderConfirmationScreen = () => {
         return { items: [], total: 0 };
     }, [params.order]);
 
-    const { manualAddress, addressType: paramAddressType } = params;
+    const { selectedAddress, addressType: paramAddressType } = params;
 
     const [pickupAddress, setPickupAddress] = useState('123 Elm Street, Apt 4B, Springfield, IL 62704');
     const [deliveryAddress, setDeliveryAddress] = useState('456 Oak Avenue, Unit 2C, Springfield, IL 62704');
@@ -81,14 +81,14 @@ const OrderConfirmationScreen = () => {
     const [isLoading, setIsLoading] = useState(false);
     
     useEffect(() => {
-        if (manualAddress) {
+        if (selectedAddress) {
             if (paramAddressType === 'pickup') {
-                setPickupAddress(manualAddress as string);
+                setPickupAddress(selectedAddress as string);
             } else {
-                setDeliveryAddress(manualAddress as string);
+                setDeliveryAddress(selectedAddress as string);
             }
         }
-    }, [manualAddress, paramAddressType]);
+    }, [selectedAddress, paramAddressType]);
 
     useEffect(() => {
         if (sameAsPickup) {
@@ -330,12 +330,12 @@ const OrderConfirmationScreen = () => {
                     
                     <View style={styles.actionButtonsContainer}>
                         <ActionButton 
-                            title="Add Manually" 
-                            icon="create-outline" 
+                            title="Select from saved" 
+                            icon="folder-outline" 
                             onPress={() => {
                                 router.push({
-                                    pathname: '/manual-address',
-                                    params: { addressType: addressType, order: params.order },
+                                    pathname: '/saved-addresses',
+                                    params: { from: 'order-confirmation', addressType: addressType, order: params.order },
                                 });
                             }} 
                             disabled={addressType === 'delivery' && sameAsPickup}

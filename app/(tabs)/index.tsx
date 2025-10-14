@@ -5,8 +5,9 @@ import { Link } from 'expo-router';
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { db } from '../../firebase';
 
-// Define the color palette for the light theme, as requested.
 const PALETTE = {
     primary: "#1193d4",
     background: "#f6f7f8",
@@ -15,7 +16,6 @@ const PALETTE = {
     card: "white",
 };
 
-// Define a TypeScript interface for our item data structure for type safety.
 interface Item {
     name: string;
     price: number;
@@ -24,7 +24,6 @@ interface Item {
     info: string;
 }
 
-// Initial item data with corrected syntax.
 const INITIAL_ITEMS: Item[] = [
     {
         name: 'Shirts',
@@ -38,7 +37,7 @@ const INITIAL_ITEMS: Item[] = [
         price: 10,
         quantity: 0,
         image: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDWE1KkM8LTwEiAHK-dWin4oil7cc0mJ02AxRlopRrj1Tp7HBmofLW5jaMJlgG16o6X75iCu-Qv95A0sNy9MvswzQZRod5aEFIKRno9pspc4UKU78Gd02e4cikxlvgPWaMYDhbgzHlTz55uuOAHSgFHr3LbpU3GvzviV45ZAq-ECylHo_c3d3TxZOUSDKQ6SimkoWkBcrPq-WSCUYb01nyPTQKKu4bfNGw336m1n4IK-6kh9K92-CDr0H9asbMsSUKcTr790kdeYvg',
-        info: "Iron pants inside out to protect the fabric's sheen." // Fixed syntax error
+        info: "Iron pants inside out to protect the fabric's sheen." 
     },
     {
         name: 'Sarees',
@@ -69,11 +68,32 @@ const BANNERS = [
 
 const HomeScreen = () => {
     const [items, setItems] = useState<Item[]>(INITIAL_ITEMS);
+    const [serviceFee, setServiceFee] = useState(0);
+    const [discount, setDiscount] = useState(0);
     const scrollViewRef = useRef<ScrollView>(null);
     const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
 
+    useEffect(() => {
+        const fetchConfig = async () => {
+            const docRef = doc(db, "products", "config");
+            const docSnap = await getDoc(docRef);
 
-    // Added types for function arguments for type safety.
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                setServiceFee(data.serviceFee || 0);
+                setDiscount(data.discount || 0);
+            } else {
+                // Create the document with default values if it doesn't exist
+                await setDoc(docRef, { serviceFee: 15, discount: 10 });
+                setServiceFee(15);
+                setDiscount(10);
+            }
+        };
+
+        fetchConfig();
+    }, []);
+
+
     const handleQuantityChange = (index: number, delta: number) => {
         const newItems = [...items];
         const newQuantity = newItems[index].quantity + delta;
@@ -83,12 +103,14 @@ const HomeScreen = () => {
         }
     };
 
-    const { subtotal, total, cartCount, serviceFee } = useMemo(() => {
+    const { subtotal, total, cartCount, fee, disc } = useMemo(() => {
         const sub = items.reduce((acc, item) => acc + item.price * item.quantity, 0);
-        const fee = sub > 0 ? 10 : 0;
+        const fee = sub > 0 ? serviceFee : 0;
+        const disc = sub > 0 ? discount : 0;
+        const total = sub + fee - disc;
         const count = items.reduce((acc, item) => acc + item.quantity, 0);
-        return { subtotal: sub, serviceFee: fee, total: sub + fee, cartCount: count };
-    }, [items]);
+        return { subtotal: sub, total, cartCount: count, fee, disc };
+    }, [items, serviceFee, discount]);
 
     const orderDetails = useMemo(() => {
         const activeItems = items.filter(item => item.quantity > 0);
@@ -100,12 +122,12 @@ const HomeScreen = () => {
             setCurrentBannerIndex(prevIndex => {
                 const nextIndex = (prevIndex + 1) % BANNERS.length;
                 scrollViewRef.current?.scrollTo({
-                    x: nextIndex * 336, // Width of carousel item (320) + margin (16)
+                    x: nextIndex * 336, 
                     animated: true,
                 });
                 return nextIndex;
             });
-        }, 3000); // Change banner every 3 seconds
+        }, 3000); 
 
         return () => clearInterval(interval);
     }, []);
@@ -135,7 +157,7 @@ const HomeScreen = () => {
                                 showsHorizontalScrollIndicator={false}
                                 style={styles.carousel}
                                 contentContainerStyle={{ paddingHorizontal: 16 }}
-                                scrollEventThrottle={16} // Needed for smooth scrolling on iOS
+                                scrollEventThrottle={16} 
                                 onMomentumScrollEnd={event => {
                                     if (Platform.OS !== 'web') {
                                         const newIndex = Math.round(
@@ -196,7 +218,11 @@ const HomeScreen = () => {
                             </View>
                             <View style={styles.summaryRow}>
                                 <Text style={styles.summaryText}>Service Fee</Text>
-                                <Text style={styles.summaryText}>{`₹${serviceFee.toFixed(2)}`}</Text>
+                                <Text style={styles.summaryText}>{`₹${fee.toFixed(2)}`}</Text>
+                            </View>
+                            <View style={styles.summaryRow}>
+                                <Text style={styles.summaryText}>Discount</Text>
+                                <Text style={[styles.summaryText, { color: PALETTE.primary }]}>{`-₹${disc.toFixed(2)}`}</Text>
                             </View>
                             <View style={[styles.summaryRow, { marginTop: 8 }]}>
                                 <Text style={styles.totalText}>Total</Text>
