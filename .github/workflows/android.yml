@@ -2,7 +2,7 @@ name: Build Android APK
 
 on:
   push:
-    branches: [main]
+    branches: [main, minicpm-chat]
   workflow_dispatch:
 
 permissions:
@@ -58,10 +58,10 @@ jobs:
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.${{ github.run_number }}
+          tag_name: minicpm-chat-v1.0.${{ github.run_number }}
           name: MiniCPM Chat v1.0.${{ github.run_number }}
           body: |
             Offline MiniCPM5 chat for Android (arm64).
             Download the APK below on your phone and install it.
           files: dist/*.apk
-          make_latest: true
+          make_latest: false

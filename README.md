@@ -23,7 +23,7 @@ After the download, everything runs on the phone with no internet.
 
 ## Build
 
-GitHub Actions builds a release APK (arm64-v8a) on every push to `main` and publishes it as a GitHub Release. To build locally:
+GitHub Actions builds a release APK (arm64-v8a) on every push to the `minicpm-chat` branch and publishes it as a GitHub Release. To build locally:
 
 ```bash
 npm ci
